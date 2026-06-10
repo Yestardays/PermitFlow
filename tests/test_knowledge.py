@@ -1,6 +1,6 @@
 import pytest
 
-from permitflow.knowledge import MemoryKnowledgeRepository
+from permitflow.knowledge import MemoryKnowledgeRepository, embedding_text
 from permitflow.models import PermissionItem, Validity
 
 
@@ -39,3 +39,11 @@ async def test_alias_exact_match_is_preferred(repo):
 async def test_fuzzy_search_returns_candidates(repo):
     results = await repo.search("想看监控")
     assert [item.name for item in results] == ["Grafana 面板查看权限"]
+
+
+def test_embedding_text_contains_searchable_permission_context(repo):
+    text = embedding_text(repo.items[0])
+
+    assert "GitHub 仓库写权限" in text
+    assert "GitHub" in text
+    assert "repo write" in text

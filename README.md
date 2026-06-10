@@ -55,6 +55,12 @@ uv run uvicorn permitflow.app:app --reload
 数据库首次创建时会自动执行 `migrations/`。已有数据卷需要手动执行新增迁移，或在仅本地开发时
 删除数据卷后重建。服务默认地址为 `http://localhost:8000`，健康检查为 `/health`。
 
+首次配置向量服务或更新种子知识后，生成权限项向量索引：
+
+```bash
+uv run python scripts/index_embeddings.py
+```
+
 ## 配置
 
 在 `.env` 中配置：

@@ -9,6 +9,20 @@ from permitflow.models import PermissionItem
 Embedder = Callable[[str], Awaitable[list[float]]]
 
 
+def embedding_text(item: PermissionItem) -> str:
+    return "\n".join(
+        filter(
+            None,
+            [
+                item.name,
+                item.category,
+                item.description,
+                "别名：" + "、".join(item.aliases),
+            ],
+        )
+    )
+
+
 def _contains(item: PermissionItem, query: str) -> bool:
     needle = query.casefold().strip()
     return bool(needle) and any(
@@ -92,14 +106,16 @@ class PostgresKnowledgeRepository:
 
     async def upsert(self, item: PermissionItem) -> PermissionItem:
         payload = item.model_dump(mode="json", exclude={"id"})
+        embedding = await self.embedder(embedding_text(item)) if self.embedder else None
         async with self.pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
                 """INSERT INTO permission_items
                    (name,category,jira_project_key,issue_type,approver_group,required_fields,
-                    prerequisites,validity_options,aliases,sensitive,description)
+                    prerequisites,validity_options,aliases,sensitive,description,embedding)
                    VALUES (%(name)s,%(category)s,%(jira_project_key)s,%(issue_type)s,
                            %(approver_group)s,%(required_fields)s,%(prerequisites)s,
-                           %(validity_options)s,%(aliases)s,%(sensitive)s,%(description)s)
+                           %(validity_options)s,%(aliases)s,%(sensitive)s,%(description)s,
+                           %(embedding)s::vector)
                    ON CONFLICT(name) DO UPDATE SET category=excluded.category,
                      jira_project_key=excluded.jira_project_key, issue_type=excluded.issue_type,
                      approver_group=excluded.approver_group,
@@ -107,6 +123,7 @@ class PostgresKnowledgeRepository:
                      prerequisites=excluded.prerequisites,
                      validity_options=excluded.validity_options, aliases=excluded.aliases,
                      sensitive=excluded.sensitive, description=excluded.description,
+                     embedding=excluded.embedding,
                      updated_at=now()
                    RETURNING *""",
                 {
@@ -115,9 +132,24 @@ class PostgresKnowledgeRepository:
                     "prerequisites": json.dumps(payload["prerequisites"], ensure_ascii=False),
                     "validity_options": json.dumps(payload["validity_options"], ensure_ascii=False),
                     "aliases": json.dumps(payload["aliases"], ensure_ascii=False),
+                    "embedding": json.dumps(embedding) if embedding is not None else None,
                 },
             )
             return self._to_item(await cur.fetchone())
+
+    async def index_embeddings(self) -> int:
+        if not self.embedder:
+            raise RuntimeError("embedding client is not configured")
+        items = await self.list_items()
+        async with self.pool.connection() as conn:
+            for item in items:
+                embedding = await self.embedder(embedding_text(item))
+                await conn.execute(
+                    "UPDATE permission_items SET embedding = %s::vector, updated_at = now() "
+                    "WHERE id = %s",
+                    (json.dumps(embedding), item.id),
+                )
+        return len(items)
 
     async def delete(self, item_id: int) -> bool:
         async with self.pool.connection() as conn, conn.cursor() as cur:
