@@ -113,8 +113,24 @@ class PermitFlowService:
     async def _prepare(self, thread_id: str, state: dict, selected: PermissionItem) -> dict:
         slots = IntentSlots.model_validate(state["slots"])
         values = dict(slots.fields)
+        resource_field = next(
+            (
+                key
+                for key in (
+                    "project",
+                    "repository",
+                    "pipeline",
+                    "dashboard",
+                    "account",
+                    "cluster",
+                    "service",
+                )
+                if key in selected.required_fields
+            ),
+            "project",
+        )
         for key, value in (
-            ("project", slots.project),
+            (resource_field, slots.project),
             ("role", slots.role),
             ("reason", slots.reason),
         ):

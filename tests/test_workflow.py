@@ -49,6 +49,26 @@ async def test_happy_path_collects_missing_fields_then_submits():
     assert submitted[0].applicant.email == "z@example.com"
 
 
+async def test_generic_project_slot_maps_to_selected_resource_field():
+    async def extract(_):
+        return IntentSlots(
+            permission_query="github写权限",
+            project="team/api",
+            reason="参与开发",
+            validity=Validity.THREE_MONTHS,
+        )
+
+    async def submit(_):
+        raise AssertionError("must not submit before confirmation")
+
+    service = PermitFlowService(Repo([permission()]), extract, submit, MemorySessionStore())
+    user = UserProfile(open_id="ou_1", name="张三", department="研发", email="z@example.com")
+
+    response = await service.start("thread", user, "申请 github 写权限")
+
+    assert response["type"] == "confirm"
+
+
 async def test_multiple_matches_are_presented_as_candidates():
     async def extract(_):
         return IntentSlots(permission_query="github")
