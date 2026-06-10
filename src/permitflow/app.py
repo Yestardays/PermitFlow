@@ -21,6 +21,40 @@ from permitflow.workflow import PermitFlowService, build_graph
 logger = logging.getLogger(__name__)
 
 
+def _message_event(payload: dict) -> tuple[str, str] | None:
+    """Return (open_id, text) for supported Feishu text-message events."""
+    event = payload.get("event", {})
+    message = event.get("message", {})
+    event_type = payload.get("header", {}).get("event_type") or event.get("type")
+    if event_type not in {"im.message.receive_v1", "message"}:
+        return None
+    if message.get("message_type") != "text":
+        return None
+    open_id = event.get("sender", {}).get("sender_id", {}).get("open_id")
+    if not open_id:
+        return None
+    try:
+        text = json.loads(message.get("content", "{}")).get("text", "")[:500]
+    except (TypeError, json.JSONDecodeError):
+        text = ""
+    return open_id, text
+
+
+def _card_action(payload: dict) -> tuple[str | None, dict, dict]:
+    """Normalize legacy and v2 Feishu card callbacks."""
+    event = payload.get("event", {})
+    action = event.get("action") or payload.get("action", {})
+    operator = event.get("operator") or payload.get("operator", {})
+    open_id = (
+        payload.get("open_id")
+        or operator.get("open_id")
+        or operator.get("operator_id", {}).get("open_id")
+    )
+    value = action.get("value") or {}
+    form_values = action.get("form_value") or action.get("form_values") or {}
+    return open_id, value, form_values
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -93,12 +127,10 @@ async def feishu_events(request: Request):
     _verify(payload)
     if payload.get("type") == "url_verification":
         return {"challenge": payload["challenge"]}
-    event = payload.get("event", {})
-    if event.get("type") != "message" or event.get("message", {}).get("message_type") != "text":
+    message_event = _message_event(payload)
+    if not message_event:
         return {"ok": True}
-    open_id = event["sender"]["sender_id"]["open_id"]
-    message = event["message"]
-    text = json.loads(message["content"]).get("text", "")[:500]
+    open_id, text = message_event
     profile = await request.app.state.feishu.get_user_profile(open_id)
     result = await request.app.state.service.start(open_id, profile, text)
     if card := result.get("card"):
@@ -113,15 +145,15 @@ async def feishu_events(request: Request):
 async def card_actions(request: Request):
     payload = await request.json()
     _verify(payload)
-    action = payload.get("action", {})
-    value = action.get("value", {})
-    open_id = payload.get("open_id") or payload.get("operator", {}).get("open_id")
+    open_id, value, form_values = _card_action(payload)
+    if not open_id:
+        raise HTTPException(status_code=400, detail="missing operator open_id")
     thread_id = open_id
     kind = value.get("action")
     if kind == "select_permission":
         result = await request.app.state.service.select(thread_id, value["permission_name"])
     elif kind == "confirm_submit":
-        result = await request.app.state.service.confirm(thread_id, action.get("form_value", {}))
+        result = await request.app.state.service.confirm(thread_id, form_values)
     elif kind == "cancel":
         result = await request.app.state.service.cancel(thread_id)
     else:
