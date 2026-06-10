@@ -62,7 +62,9 @@ uv run uvicorn permitflow.app:app --reload
 | 变量 | 用途 |
 |---|---|
 | `DATABASE_URL` | PostgreSQL 连接串 |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | OpenAI 兼容 Responses API |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | OpenAI 兼容 Chat Completions API |
+| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | 独立的 OpenAI 兼容向量服务 |
+| `EMBEDDING_MODEL` / `EMBEDDING_DIMENSIONS` | 向量模型与维度，默认 1536 |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 飞书应用凭据 |
 | `FEISHU_VERIFICATION_TOKEN` | webhook 校验令牌 |
 | `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` | Jira Cloud 凭据 |

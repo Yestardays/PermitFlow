@@ -16,34 +16,44 @@ class IntentExtractor:
 
     async def extract(self, user_input: str) -> IntentSlots:
         last_error: Exception | None = None
+        schema = json.dumps(IntentSlots.model_json_schema(), ensure_ascii=False)
         for _ in range(2):
             try:
-                response = await self.client.responses.create(
+                response = await self.client.chat.completions.create(
                     model=self.model,
-                    instructions=SYSTEM_PROMPT,
-                    input=f"user_input={json.dumps(user_input[:500], ensure_ascii=False)}",
-                    text={
-                        "format": {
-                            "type": "json_schema",
-                            "name": "permission_intent",
-                            "strict": True,
-                            "schema": IntentSlots.model_json_schema(),
-                        }
-                    },
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"请仅输出 JSON。JSON Schema：{schema}\n"
+                                f"user_input={json.dumps(user_input[:500], ensure_ascii=False)}"
+                            ),
+                        },
+                    ],
+                    response_format={"type": "json_object"},
                 )
-                return IntentSlots.model_validate_json(response.output_text)
+                content = response.choices[0].message.content
+                if not content:
+                    raise ValueError("LLM 返回空内容")
+                return IntentSlots.model_validate_json(content)
             except Exception as exc:  # SDK and validation failures share one retry policy.
                 last_error = exc
         raise RuntimeError("LLM 意图提取失败") from last_error
 
 
 class EmbeddingClient:
-    def __init__(self, client: AsyncOpenAI, model: str = "text-embedding-3-small"):
+    def __init__(self, client: AsyncOpenAI, model: str, dimensions: int = 1536):
         self.client = client
         self.model = model
+        self.dimensions = dimensions
 
     async def embed(self, text: str) -> list[float]:
-        response = await self.client.embeddings.create(model=self.model, input=text[:500])
+        response = await self.client.embeddings.create(
+            model=self.model,
+            input=text[:500],
+            dimensions=self.dimensions,
+        )
         return response.data[0].embedding
 
 

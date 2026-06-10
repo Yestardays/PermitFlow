@@ -27,9 +27,17 @@ async def lifespan(app: FastAPI):
     configure_logging(settings.log_level)
     pool = AsyncConnectionPool(settings.database_url, open=False)
     await pool.open()
-    openai_client = AsyncOpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
-    llm = IntentExtractor(openai_client, settings.llm_model)
-    embedding = EmbeddingClient(openai_client)
+    llm_client = AsyncOpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
+    embedding_client = AsyncOpenAI(
+        api_key=settings.embedding_api_key,
+        base_url=settings.embedding_base_url,
+    )
+    llm = IntentExtractor(llm_client, settings.llm_model)
+    embedding = EmbeddingClient(
+        embedding_client,
+        settings.embedding_model,
+        settings.embedding_dimensions,
+    )
     jira = JiraClient(
         settings.jira_base_url,
         settings.jira_email,

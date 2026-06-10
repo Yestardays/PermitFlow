@@ -9,9 +9,13 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     database_url: str = "postgresql://permitflow:permitflow@localhost:5432/permitflow"
-    llm_base_url: str = "https://api.openai.com/v1"
+    llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: str = ""
-    llm_model: str = "gpt-4.1-mini"
+    llm_model: str = "deepseek-v4-pro"
+    embedding_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    embedding_api_key: str = ""
+    embedding_model: str = "text-embedding-v4"
+    embedding_dimensions: int = Field(default=1536, ge=64, le=2048)
     feishu_app_id: str = ""
     feishu_app_secret: str = ""
     feishu_verification_token: str = ""
