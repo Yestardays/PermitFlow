@@ -1,0 +1,14 @@
+services:
+  jira-mock:
+    image: wiremock/wiremock:3.13.1
+    command: ["--global-response-templating", "--verbose"]
+    ports:
+      - "18080:8080"
+    volumes:
+      - ./tests/fixtures/wiremock:/home/wiremock:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/__admin/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+

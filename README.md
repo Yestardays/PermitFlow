@@ -83,6 +83,14 @@ uv run pytest
 
 CI 在 push 和 pull request 时执行相同检查。
 
+Jira HTTP 集成测试使用 WireMock 容器：
+
+```bash
+docker compose -f docker-compose.test.yml up -d jira-mock
+JIRA_INTEGRATION_URL=http://localhost:18080 uv run pytest tests/test_jira_integration.py
+docker compose -f docker-compose.test.yml down
+```
+
 ## 阶段边界
 
 Phase 1 提供申请闭环；Phase 2 增加前提校验、未命中记录和指标；Phase 3 提供 Jira webhook

@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/rest/api/3/issue",
+    "headers": {
+      "Content-Type": { "contains": "application/json" }
+    },
+    "bodyPatterns": [
+      { "matchesJsonPath": "$.fields.project.key" },
+      { "matchesJsonPath": "$.fields.summary" },
+      { "matchesJsonPath": "$.fields.description.content[0].content[0].text" }
+    ]
+  },
+  "response": {
+    "status": 201,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "id": "10001",
+      "key": "ACCESS-1001",
+      "self": "{{request.baseUrl}}/rest/api/3/issue/10001"
+    }
+  }
+}
+

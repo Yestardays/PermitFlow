@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/rest/api/3/issue/[A-Z]+-[0-9]+/comment",
+    "bodyPatterns": [
+      { "matchesJsonPath": "$.body.content[0].content[0].text" }
+    ]
+  },
+  "response": {
+    "status": 201,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "id": "20001" }
+  }
+}
+
