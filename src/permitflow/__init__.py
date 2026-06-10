@@ -1,0 +1,3 @@
+"""PermitFlow permission request assistant."""
+
+__version__ = "0.1.0"

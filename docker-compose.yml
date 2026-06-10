@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: permitflow
+      POSTGRES_USER: permitflow
+      POSTGRES_PASSWORD: permitflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - permitflow_pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U permitflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  permitflow_pgdata:
+

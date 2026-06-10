@@ -1,0 +1,86 @@
+import json
+from collections.abc import Awaitable, Callable, Sequence
+
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
+
+from permitflow.models import PermissionItem
+
+Embedder = Callable[[str], Awaitable[list[float]]]
+
+
+def _contains(item: PermissionItem, query: str) -> bool:
+    needle = query.casefold().strip()
+    return bool(needle) and any(
+        needle in value.casefold() or value.casefold() in needle
+        for value in [item.name, *item.aliases]
+    )
+
+
+class MemoryKnowledgeRepository:
+    def __init__(self, items: Sequence[PermissionItem]):
+        self.items = list(items)
+
+    async def search(self, query: str, limit: int = 5) -> list[PermissionItem]:
+        exact = [item for item in self.items if _contains(item, query)]
+        if exact:
+            return exact[:limit]
+        tokens = {part.casefold() for part in query.split() if part}
+
+        def score(item: PermissionItem) -> int:
+            haystack = f"{item.name} {item.category} {' '.join(item.aliases)}".casefold()
+            category_match = item.category.casefold() in query.casefold()
+            return int(category_match) + sum(token in haystack for token in tokens)
+
+        ranked = sorted(
+            self.items,
+            key=score,
+            reverse=True,
+        )
+        return [item for item in ranked if score(item) > 0][:limit]
+
+
+class PostgresKnowledgeRepository:
+    def __init__(self, pool: AsyncConnectionPool, embedder: Embedder | None = None):
+        self.pool = pool
+        self.embedder = embedder
+
+    async def search(self, query: str, limit: int = 5) -> list[PermissionItem]:
+        exact_sql = """
+            SELECT * FROM permission_items
+            WHERE name ILIKE %(pattern)s
+               OR EXISTS (
+                   SELECT 1 FROM jsonb_array_elements_text(aliases) a
+                   WHERE a ILIKE %(pattern)s
+               )
+            LIMIT %(limit)s
+        """
+        async with self.pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(exact_sql, {"pattern": f"%{query}%", "limit": limit})
+            rows = await cur.fetchall()
+            if rows:
+                return [self._to_item(row) for row in rows]
+            if not self.embedder:
+                return []
+            embedding = await self.embedder(query)
+            await cur.execute(
+                "SELECT * FROM permission_items WHERE embedding IS NOT NULL "
+                "ORDER BY embedding <=> %(embedding)s::vector LIMIT %(limit)s",
+                {"embedding": json.dumps(embedding), "limit": limit},
+            )
+            return [self._to_item(row) for row in await cur.fetchall()]
+
+    @staticmethod
+    def _to_item(row: dict) -> PermissionItem:
+        allowed = set(PermissionItem.model_fields)
+        return PermissionItem.model_validate(
+            {key: value for key, value in row.items() if key in allowed}
+        )
+
+    async def log_unmatched(self, open_id: str, user_input: str, inferred: dict) -> None:
+        async with self.pool.connection() as conn:
+            await conn.execute(
+                "INSERT INTO unmatched_requests(open_id,user_input,inferred_intent) "
+                "VALUES (%s,%s,%s)",
+                (open_id, user_input[:500], json.dumps(inferred, ensure_ascii=False)),
+            )
