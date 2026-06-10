@@ -38,6 +38,7 @@ class FeishuClient:
             name=user["name"],
             email=user["email"],
             department=departments[0] if departments else "",
+            manager_open_id=user.get("leader_user_id"),
         )
 
     async def send_card(self, open_id: str, card: dict) -> None:

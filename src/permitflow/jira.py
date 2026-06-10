@@ -37,6 +37,21 @@ class JiraClient:
             success=False, fallback_text=self._fallback(draft), fallback_url=self.service_desk_url
         )
 
+    async def remind(self, ticket_key: str, message: str) -> bool:
+        body = plain_text(message or "请协助关注该权限申请的处理进度", 500)
+        response = await self.client.post(
+            f"{self.base_url}/rest/api/3/issue/{plain_text(ticket_key, 50)}/comment",
+            json={
+                "body": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [{"type": "paragraph", "content": [{"type": "text", "text": body}]}],
+                }
+            },
+        )
+        response.raise_for_status()
+        return True
+
     @staticmethod
     def _payload(draft: ApplicationDraft) -> dict:
         values: Mapping[str, str] = draft.values

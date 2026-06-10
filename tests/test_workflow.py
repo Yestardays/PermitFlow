@@ -99,3 +99,23 @@ async def test_sensitive_permission_rejects_permanent_validity():
         assert "不支持" in str(exc) or "不能" in str(exc)
     else:
         raise AssertionError("permanent validity should fail")
+
+
+async def test_only_direct_manager_can_start_proxy_application():
+    async def extract(_):
+        return IntentSlots(permission_query="github")
+
+    service = PermitFlowService(Repo([permission()]), extract, lambda _: None, MemorySessionStore())
+    manager = UserProfile(open_id="manager", name="经理", email="m@example.com")
+    report = UserProfile(
+        open_id="report",
+        name="员工",
+        email="r@example.com",
+        manager_open_id="another-manager",
+    )
+    try:
+        await service.start_for_direct_report("thread", manager, report, "申请 github")
+    except ValueError as exc:
+        assert "直属上级" in str(exc)
+    else:
+        raise AssertionError("non-manager proxy application should fail")

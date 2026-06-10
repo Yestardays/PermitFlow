@@ -2,7 +2,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from openai import AsyncOpenAI
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -37,9 +37,12 @@ async def lifespan(app: FastAPI):
         settings.it_service_desk_url,
     )
     feishu = FeishuClient(settings.feishu_app_id, settings.feishu_app_secret)
+    knowledge = PostgresKnowledgeRepository(pool, embedding.embed)
     app.state.feishu = feishu
+    app.state.jira = jira
+    app.state.knowledge = knowledge
     app.state.service = PermitFlowService(
-        PostgresKnowledgeRepository(pool, embedding.embed),
+        knowledge,
         llm.extract,
         jira.submit,
         PostgresSessionStore(pool, settings.session_ttl_minutes),
@@ -58,6 +61,12 @@ def _verify(payload: dict) -> None:
     token = payload.get("token") or payload.get("header", {}).get("token")
     if expected and token != expected:
         raise HTTPException(status_code=403, detail="invalid verification token")
+
+
+def _verify_admin(token: str | None) -> None:
+    expected = get_settings().admin_token
+    if not expected or token != expected:
+        raise HTTPException(status_code=403, detail="invalid admin token")
 
 
 @app.get("/health")
@@ -128,3 +137,53 @@ async def jira_status(request: Request):
         raise HTTPException(status_code=400, detail="missing notification fields")
     await request.app.state.feishu.send_text(open_id, f"权限工单 {ticket} 状态更新为：{status}")
     return {"ok": True}
+
+
+@app.get("/api/admin/permissions")
+async def list_permissions(request: Request, x_admin_token: str | None = Header(default=None)):
+    _verify_admin(x_admin_token)
+    return [item.model_dump(mode="json") for item in await request.app.state.knowledge.list_items()]
+
+
+@app.put("/api/admin/permissions")
+async def upsert_permission(request: Request, x_admin_token: str | None = Header(default=None)):
+    from permitflow.models import PermissionItem
+
+    _verify_admin(x_admin_token)
+    item = PermissionItem.model_validate(await request.json())
+    saved = await request.app.state.knowledge.upsert(item)
+    return saved.model_dump(mode="json")
+
+
+@app.delete("/api/admin/permissions/{item_id}")
+async def delete_permission(
+    item_id: int, request: Request, x_admin_token: str | None = Header(default=None)
+):
+    _verify_admin(x_admin_token)
+    if not await request.app.state.knowledge.delete(item_id):
+        raise HTTPException(status_code=404, detail="permission item not found")
+    return {"ok": True}
+
+
+@app.post("/api/admin/tickets/{ticket_key}/remind")
+async def remind_ticket(
+    ticket_key: str, request: Request, x_admin_token: str | None = Header(default=None)
+):
+    _verify_admin(x_admin_token)
+    payload = await request.json()
+    await request.app.state.jira.remind(ticket_key, payload.get("message", ""))
+    return {"ok": True}
+
+
+@app.post("/api/admin/manager-applications")
+async def manager_application(request: Request, x_admin_token: str | None = Header(default=None)):
+    _verify_admin(x_admin_token)
+    payload = await request.json()
+    requester = await request.app.state.feishu.get_user_profile(payload["requester_open_id"])
+    applicant = await request.app.state.feishu.get_user_profile(payload["applicant_open_id"])
+    result = await request.app.state.service.start_for_direct_report(
+        payload["requester_open_id"], requester, applicant, payload["user_input"][:500]
+    )
+    if card := result.get("card"):
+        await request.app.state.feishu.send_card(payload["requester_open_id"], card)
+    return result

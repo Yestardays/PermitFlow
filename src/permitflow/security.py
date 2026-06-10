@@ -11,3 +11,10 @@ def plain_text(value: object, max_length: int = 1000) -> str:
 def assert_self_application(applicant_email: str, requested_email: str | None) -> None:
     if requested_email and requested_email.casefold() != applicant_email.casefold():
         raise ValueError("当前版本仅允许为自己申请权限")
+
+
+def assert_direct_manager(requester: object, applicant: object) -> None:
+    requester_open_id = getattr(requester, "open_id", None)
+    manager_open_id = getattr(applicant, "manager_open_id", None)
+    if not requester_open_id or manager_open_id != requester_open_id:
+        raise ValueError("仅直属上级可以代下属申请")

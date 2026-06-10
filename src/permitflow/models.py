@@ -17,6 +17,7 @@ class UserProfile(BaseModel):
     name: str
     department: str = ""
     email: str
+    manager_open_id: str | None = None
 
 
 class IntentSlots(BaseModel):

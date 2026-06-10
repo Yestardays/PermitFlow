@@ -84,3 +84,42 @@ class PostgresKnowledgeRepository:
                 "VALUES (%s,%s,%s)",
                 (open_id, user_input[:500], json.dumps(inferred, ensure_ascii=False)),
             )
+
+    async def list_items(self) -> list[PermissionItem]:
+        async with self.pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute("SELECT * FROM permission_items ORDER BY category, name")
+            return [self._to_item(row) for row in await cur.fetchall()]
+
+    async def upsert(self, item: PermissionItem) -> PermissionItem:
+        payload = item.model_dump(mode="json", exclude={"id"})
+        async with self.pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                """INSERT INTO permission_items
+                   (name,category,jira_project_key,issue_type,approver_group,required_fields,
+                    prerequisites,validity_options,aliases,sensitive,description)
+                   VALUES (%(name)s,%(category)s,%(jira_project_key)s,%(issue_type)s,
+                           %(approver_group)s,%(required_fields)s,%(prerequisites)s,
+                           %(validity_options)s,%(aliases)s,%(sensitive)s,%(description)s)
+                   ON CONFLICT(name) DO UPDATE SET category=excluded.category,
+                     jira_project_key=excluded.jira_project_key, issue_type=excluded.issue_type,
+                     approver_group=excluded.approver_group,
+                     required_fields=excluded.required_fields,
+                     prerequisites=excluded.prerequisites,
+                     validity_options=excluded.validity_options, aliases=excluded.aliases,
+                     sensitive=excluded.sensitive, description=excluded.description,
+                     updated_at=now()
+                   RETURNING *""",
+                {
+                    **payload,
+                    "required_fields": json.dumps(payload["required_fields"], ensure_ascii=False),
+                    "prerequisites": json.dumps(payload["prerequisites"], ensure_ascii=False),
+                    "validity_options": json.dumps(payload["validity_options"], ensure_ascii=False),
+                    "aliases": json.dumps(payload["aliases"], ensure_ascii=False),
+                },
+            )
+            return self._to_item(await cur.fetchone())
+
+    async def delete(self, item_id: int) -> bool:
+        async with self.pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute("DELETE FROM permission_items WHERE id = %s", (item_id,))
+            return cur.rowcount > 0

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     it_service_desk_url: str = "https://jira.example.com/servicedesk"
     session_ttl_minutes: int = Field(default=30, ge=1)
     log_level: str = "INFO"
+    admin_token: str = ""
 
 
 @lru_cache

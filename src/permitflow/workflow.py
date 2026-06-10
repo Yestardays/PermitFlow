@@ -7,7 +7,7 @@ from langgraph.types import interrupt
 from permitflow.cards import candidate_card, confirmation_card, result_card
 from permitflow.llm import fallback_extract
 from permitflow.models import ApplicationDraft, IntentSlots, PermissionItem, UserProfile, Validity
-from permitflow.security import assert_self_application
+from permitflow.security import assert_direct_manager, assert_self_application
 
 
 class Knowledge(Protocol):
@@ -87,6 +87,12 @@ class PermitFlowService:
             await self.sessions.set(thread_id, state)
             return {"type": "candidates", "card": candidate_card(candidates)}
         return await self._prepare(thread_id, state, candidates[0])
+
+    async def start_for_direct_report(
+        self, thread_id: str, requester: UserProfile, applicant: UserProfile, user_input: str
+    ) -> dict:
+        assert_direct_manager(requester, applicant)
+        return await self.start(thread_id, applicant, user_input)
 
     async def select(self, thread_id: str, permission_name: str) -> dict:
         state = await self.sessions.get(thread_id)

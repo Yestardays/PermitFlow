@@ -15,6 +15,7 @@ PermitFlow 只帮助申请：不审批、不执行权限开通，也不允许代
 - Jira 创建失败重试 2 次，再降级为预填文本和服务台链接
 - LangGraph interrupt 节点与 PostgresSaver 支持
 - 未命中记录、权限前提校验、Prometheus 指标与 Jira 状态通知入口
+- 管理令牌保护的知识库 CRUD、催办及直属上级代申请接口
 - 用户输入 500 字限制、身份防冒用、纯文本转义和最小知识注入边界
 
 ## 架构
@@ -67,6 +68,7 @@ uv run uvicorn permitflow.app:app --reload
 | `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` | Jira Cloud 凭据 |
 | `IT_SERVICE_DESK_URL` | Jira 失败时的降级入口 |
 | `SESSION_TTL_MINUTES` | 会话有效期，默认 30 分钟 |
+| `ADMIN_TOKEN` | Phase 3 管理接口令牌 |
 
 飞书配置详见 `docs/feishu-setup.md`，运维说明见 `docs/operations.md`。
 
@@ -83,4 +85,3 @@ CI 在 push 和 pull request 时执行相同检查。
 
 Phase 1 提供申请闭环；Phase 2 增加前提校验、未命中记录和指标；Phase 3 提供 Jira webhook
 驱动的状态通知接口。状态通知不代表 PermitFlow 参与审批或权限开通。
-
