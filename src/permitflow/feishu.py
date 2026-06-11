@@ -5,6 +5,16 @@ import httpx
 from permitflow.models import UserProfile
 
 
+def _data(response: httpx.Response) -> dict:
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("code", 0) != 0:
+        raise RuntimeError(
+            f"Feishu API failed: code={payload.get('code')} msg={payload.get('msg', 'unknown')}"
+        )
+    return payload
+
+
 class FeishuClient:
     def __init__(self, app_id: str, app_secret: str, client: httpx.AsyncClient | None = None):
         self.app_id = app_id
@@ -19,8 +29,7 @@ class FeishuClient:
             "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
             json={"app_id": self.app_id, "app_secret": self.app_secret},
         )
-        response.raise_for_status()
-        self._tenant_token = response.json()["tenant_access_token"]
+        self._tenant_token = _data(response)["tenant_access_token"]
         return self._tenant_token
 
     async def get_user_profile(self, open_id: str) -> UserProfile:
@@ -30,8 +39,7 @@ class FeishuClient:
             params={"user_id_type": "open_id"},
             headers={"Authorization": f"Bearer {token}"},
         )
-        response.raise_for_status()
-        user = response.json()["data"]["user"]
+        user = _data(response)["data"]["user"]
         departments = user.get("department_ids") or []
         return UserProfile(
             open_id=open_id,
@@ -53,7 +61,7 @@ class FeishuClient:
                 "content": json.dumps(card, ensure_ascii=False),
             },
         )
-        response.raise_for_status()
+        _data(response)
 
     async def send_text(self, open_id: str, message: str) -> None:
         token = await self._token()
@@ -67,4 +75,4 @@ class FeishuClient:
                 "content": json.dumps({"text": message[:500]}, ensure_ascii=False),
             },
         )
-        response.raise_for_status()
+        _data(response)
