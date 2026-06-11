@@ -55,9 +55,9 @@ def test_legacy_card_action_is_normalized():
     assert _card_action(payload) == ("ou_old", {"action": "cancel"}, {})
 
 
-def test_v2_callback_wraps_raw_card_data():
+def test_v2_callback_returns_success_toast():
     card = {"schema": "2.0", "body": {"elements": []}}
 
     response = _card_callback_response({"type": "submitted", "card": card})
 
-    assert response["card"] == {"type": "raw", "data": card}
+    assert response == {"toast": {"type": "success", "content": "已处理"}}

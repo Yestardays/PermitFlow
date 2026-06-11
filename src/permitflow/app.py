@@ -56,10 +56,7 @@ def _card_action(payload: dict) -> tuple[str | None, dict, dict]:
 
 
 def _card_callback_response(result: dict) -> dict:
-    response = {"toast": {"type": "success", "content": result.get("message", "已处理")}}
-    if card := result.get("card"):
-        response["card"] = {"type": "raw", "data": card}
-    return response
+    return {"toast": {"type": "success", "content": result.get("message", "已处理")}}
 
 
 @asynccontextmanager
@@ -167,6 +164,8 @@ async def card_actions(request: Request):
         result = await request.app.state.service.cancel(thread_id)
     else:
         raise HTTPException(status_code=400, detail="unknown action")
+    if card := result.get("card"):
+        await request.app.state.feishu.send_card(open_id, card)
     REQUESTS.labels("card_action", result["type"]).inc()
     return JSONResponse(_card_callback_response(result))
 
