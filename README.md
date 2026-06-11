@@ -1,95 +1,130 @@
 # PermitFlow
 
-PermitFlow 是企业内部权限申请助手。员工在飞书中用中文描述需要的 GitHub、Jira、
-CI/CD、监控或云账号权限，服务匹配维护好的权限知识、补齐缺失字段、展示可编辑确认卡，
-并在用户确认后创建 Jira 工单。
+企业内部权限申请助手 —— 飞书Bot，帮员工用自然语言描述权限需求，自动匹配、补全信息、确认后提交 Jira 工单。
 
-PermitFlow 只帮助申请：不审批、不执行权限开通，也不允许代他人申请。
+**只做申请，不碰审批和权限开通。**
 
-## 功能
+## 快速开始
 
-- LLM 一次完成意图分类与槽位提取，使用 JSON Schema structured output
-- 权限名称/别名 ILIKE 精确检索，未命中时使用 pgvector 向量检索
-- 内置 20 个高频权限项，覆盖 GitHub、Jira、CI/CD、监控与云账号
-- 缺什么问什么，候选项全部列出，确认卡中可直接修改字段
-- Jira 创建失败重试 2 次，再降级为预填文本和服务台链接
-- LangGraph interrupt 节点与 PostgresSaver 支持
-- 未命中记录、权限前提校验、Prometheus 指标与 Jira 状态通知入口
-- 管理令牌保护的知识库 CRUD、催办及直属上级代申请接口
-- 用户输入 500 字限制、身份防冒用、纯文本转义和最小知识注入边界
+### 前置要求
 
-## 架构
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)（Python 依赖管理）
+- Docker（运行 PostgreSQL + pgvector）
 
-```mermaid
-flowchart LR
-    U["飞书用户"] --> F["FastAPI Webhook"]
-    F --> G["PermitFlow / LangGraph"]
-    G --> L["LLM 槽位提取"]
-    G --> K["PostgreSQL + pgvector"]
-    G --> C["飞书确认卡"]
-    C --> G
-    G --> J["Jira REST API"]
-    J --> T["工单链接或降级文本"]
+### 1. 克隆项目
+
+```bash
+git clone git@github.com:Yestardays/PermitFlow.git
+cd PermitFlow
 ```
 
-核心代码位于 `src/permitflow/`：
+### 2. 启动数据库
 
-- `workflow.py`：申请状态流及 LangGraph interrupt 定义
-- `knowledge.py`：精确与向量混合检索
-- `llm.py`：结构化槽位提取和失败降级
-- `cards.py`：候选、确认和结果卡片
-- `jira.py` / `feishu.py`：外部系统客户端
-- `app.py`：飞书事件、卡片动作、Jira 通知和 metrics HTTP 接口
+```bash
+docker compose up -d
+```
 
-## 本地启动
+PostgreSQL 16 + pgvector 会自动启动，migrations 目录下的建表脚本和种子数据（20条高频权限）也会自动执行。
 
-要求 Python 3.12+、uv 和 Docker。
+### 3. 安装依赖
+
+```bash
+uv sync --all-groups
+```
+
+### 4. 配置环境变量
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
-uv sync --all-groups
-uv run uvicorn permitflow.app:app --reload
 ```
 
-数据库首次创建时会自动执行 `migrations/`。已有数据卷需要手动执行新增迁移，或在仅本地开发时
-删除数据卷后重建。服务默认地址为 `http://localhost:8000`，健康检查为 `/health`。
+编辑 `.env`，填入以下必填项：
 
-首次配置向量服务或更新种子知识后，生成权限项向量索引：
+```bash
+# LLM（OpenAI 兼容接口，用于意图提取）
+LLM_BASE_URL=https://api.deepseek.com
+LLM_API_KEY=sk-xxx
+LLM_MODEL=deepseek-v4-pro
+
+# Embedding（OpenAI 兼容接口，用于向量检索）
+EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+EMBEDDING_API_KEY=sk-xxx
+EMBEDDING_MODEL=text-embedding-v4
+EMBEDDING_DIMENSIONS=1536
+
+# 飞书（自建应用凭据）
+FEISHU_APP_ID=cli_xxx
+FEISHU_APP_SECRET=xxx
+FEISHU_VERIFICATION_TOKEN=xxx
+
+# Jira（工单提交）
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=bot@your-company.com
+JIRA_API_TOKEN=xxx
+IT_SERVICE_DESK_URL=https://your-domain.atlassian.net/servicedesk
+```
+
+| 变量 | 说明 |
+|---|---|
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | OpenAI 兼容 Chat Completions 接口 |
+| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | OpenAI 兼容 Embeddings 接口 |
+| `EMBEDDING_MODEL` / `EMBEDDING_DIMENSIONS` | 向量模型及维度，默认 1536 |
+| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 飞书自建应用凭据 |
+| `FEISHU_VERIFICATION_TOKEN` | 飞书事件订阅校验 Token |
+| `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` | Jira Cloud 连接凭据 |
+| `IT_SERVICE_DESK_URL` | Jira 提交失败时的降级入口 |
+| `SESSION_TTL_MINUTES` | 会话过期时间，默认 30 分钟 |
+| `ADMIN_TOKEN` | 管理接口鉴权 Token（可选） |
+
+飞书应用配置细节见 [docs/feishu-setup.md](docs/feishu-setup.md)。
+
+### 5. 生成向量索引
+
+首次运行或更新种子数据后，需要为权限条目生成 embedding：
 
 ```bash
 uv run python scripts/index_embeddings.py
 ```
 
-## 配置
+### 6. 启动服务
 
-在 `.env` 中配置：
+```bash
+uv run uvicorn permitflow.app:app --reload
+```
 
-| 变量 | 用途 |
-|---|---|
-| `DATABASE_URL` | PostgreSQL 连接串 |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | OpenAI 兼容 Chat Completions API |
-| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | 独立的 OpenAI 兼容向量服务 |
-| `EMBEDDING_MODEL` / `EMBEDDING_DIMENSIONS` | 向量模型与维度，默认 1536 |
-| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 飞书应用凭据 |
-| `FEISHU_VERIFICATION_TOKEN` | webhook 校验令牌 |
-| `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` | Jira Cloud 凭据 |
-| `IT_SERVICE_DESK_URL` | Jira 失败时的降级入口 |
-| `SESSION_TTL_MINUTES` | 会话有效期，默认 30 分钟 |
-| `ADMIN_TOKEN` | Phase 3 管理接口令牌 |
+服务默认监听 `http://localhost:8000`，健康检查：`/health`。
 
-飞书配置详见 `docs/feishu-setup.md`，运维说明见 `docs/operations.md`。
+### 7. 配置飞书回调
 
-## 测试
+在飞书开放平台将应用的**消息事件**和**卡片回调** Webhook URL 分别指向：
+
+- 消息事件：`https://<你的域名>/webhooks/feishu/events`
+- 卡片回调：`https://<你的域名>/webhooks/feishu/card-actions`
+
+本地开发需使用反向代理（如 ngrok）暴露公网地址。
+
+## 使用方式
+
+在飞书中给 Bot 发消息，用自然语言描述权限需求：
+
+> "我要 GitHub 上 ant-design 仓库的写权限"
+
+Bot 会：
+1. 提取意图（系统、项目、角色）
+2. 搜索权限知识库
+3. 缺信息时追问，有多个候选时列出供选择
+4. 展示飞书确认卡片，可直接编辑表单字段
+5. 确认后自动创建 Jira 工单，返回工单链接
+
+## 运行测试
 
 ```bash
 uv run ruff check .
 uv run pytest
 ```
 
-CI 在 push 和 pull request 时执行相同检查。
-
-Jira HTTP 集成测试使用 WireMock 容器：
+Jira HTTP 集成测试（需 WireMock 容器）：
 
 ```bash
 docker compose -f docker-compose.test.yml up -d jira-mock
@@ -97,7 +132,39 @@ JIRA_INTEGRATION_URL=http://localhost:18080 uv run pytest tests/test_jira_integr
 docker compose -f docker-compose.test.yml down
 ```
 
-## 阶段边界
+## 技术栈
 
-Phase 1 提供申请闭环；Phase 2 增加前提校验、未命中记录和指标；Phase 3 提供 Jira webhook
-驱动的状态通知接口。状态通知不代表 PermitFlow 参与审批或权限开通。
+| 层 | 选型 |
+|---|---|
+| 编排 | LangGraph（Agent + Tool 模式，interrupt 人机确认） |
+| 框架 | FastAPI |
+| 数据库 | PostgreSQL 16 + pgvector |
+| LLM | OpenAI 兼容接口（DeepSeek / 通义千问 / 任意兼容服务） |
+| 检索 | ILIKE 精确匹配优先 → pgvector 向量语义兜底 |
+| 交互 | 飞书 v2 交互式卡片 |
+| 工单 | Jira REST API |
+| 依赖 | uv |
+| 中间件 | Docker Compose（PG + pgvector） |
+
+### 核心代码
+
+```
+src/permitflow/
+├── app.py           # FastAPI 路由、生命周期
+├── workflow.py      # LangGraph 状态图 + PermintFlowService
+├── knowledge.py     # 知识库检索（ILIKE → pgvector）
+├── llm.py           # LLM 意图提取 + 嵌入
+├── cards.py         # 飞书 v2 卡片构建
+├── feishu.py        # 飞书 API 客户端
+├── jira.py          # Jira API 客户端（重试 + 降级）
+├── session.py       # 会话存储（30min TTL）
+├── persistence.py   # LangGraph PostgresSaver
+├── security.py      # 输入安全与身份校验
+├── models.py        # Pydantic 数据模型
+├── config.py        # 配置管理
+└── observability.py # 日志与 Prometheus 指标
+```
+
+## License
+
+MIT
