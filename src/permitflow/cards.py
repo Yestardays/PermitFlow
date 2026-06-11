@@ -64,23 +64,18 @@ def confirmation_card(draft: ApplicationDraft) -> dict:
                     "elements": [
                         *inputs,
                         {
-                            "tag": "action",
-                            "actions": [
-                                {
-                                    "tag": "button",
-                                    "type": "primary",
-                                    "text": {"tag": "plain_text", "content": "确认提交"},
-                                    "name": "submit",
-                                    "action_type": "form_submit",
-                                    "value": {"action": "confirm_submit"},
-                                },
-                                {
-                                    "tag": "button",
-                                    "text": {"tag": "plain_text", "content": "取消"},
-                                    "name": "cancel",
-                                    "value": {"action": "cancel"},
-                                },
-                            ],
+                            "tag": "button",
+                            "type": "primary",
+                            "text": {"tag": "plain_text", "content": "确认提交"},
+                            "name": "submit",
+                            "action_type": "form_submit",
+                            "value": {"action": "confirm_submit"},
+                        },
+                        {
+                            "tag": "button",
+                            "text": {"tag": "plain_text", "content": "取消"},
+                            "name": "cancel",
+                            "value": {"action": "cancel"},
                         },
                     ],
                 },

@@ -21,7 +21,7 @@ def test_confirmation_card_uses_v2_form_submit():
 
     card = confirmation_card(draft)
     form = card["body"]["elements"][1]
-    submit = form["elements"][-1]["actions"][0]
+    submit = form["elements"][-2]
 
     assert card["schema"] == "2.0"
     assert form["tag"] == "form"
