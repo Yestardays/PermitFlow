@@ -6,12 +6,16 @@ from permitflow.models import UserProfile
 
 
 def _data(response: httpx.Response) -> dict:
-    response.raise_for_status()
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError:
+        response.raise_for_status()
+        raise RuntimeError("Feishu API returned a non-JSON response") from None
     if payload.get("code", 0) != 0:
         raise RuntimeError(
             f"Feishu API failed: code={payload.get('code')} msg={payload.get('msg', 'unknown')}"
         )
+    response.raise_for_status()
     return payload
 
 
