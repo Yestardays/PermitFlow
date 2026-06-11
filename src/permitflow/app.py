@@ -145,6 +145,8 @@ async def feishu_events(request: Request):
 async def card_actions(request: Request):
     payload = await request.json()
     _verify(payload)
+    if payload.get("type") == "url_verification":
+        return {"challenge": payload["challenge"]}
     open_id, value, form_values = _card_action(payload)
     if not open_id:
         raise HTTPException(status_code=400, detail="missing operator open_id")

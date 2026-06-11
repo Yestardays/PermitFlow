@@ -41,3 +41,15 @@ def test_v2_card_action_is_normalized():
         {"action": "confirm_submit"},
         {"reason": "开发需要", "validity": "3个月"},
     )
+
+
+def test_legacy_card_action_is_normalized():
+    payload = {
+        "open_id": "ou_old",
+        "action": {
+            "value": {"action": "cancel"},
+            "form_value": {},
+        },
+    }
+
+    assert _card_action(payload) == ("ou_old", {"action": "cancel"}, {})
