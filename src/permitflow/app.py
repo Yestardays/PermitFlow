@@ -2,7 +2,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from openai import AsyncOpenAI
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -57,6 +57,19 @@ def _card_action(payload: dict) -> tuple[str | None, dict, dict]:
 
 def _card_callback_response(result: dict) -> dict:
     return {"toast": {"type": "success", "content": result.get("message", "已处理")}}
+
+
+async def _process_feishu_message(app_state, open_id: str, text: str) -> None:
+    try:
+        profile = await app_state.feishu.get_user_profile(open_id)
+        result = await app_state.service.start(open_id, profile, text)
+        if card := result.get("card"):
+            await app_state.feishu.send_card(open_id, card)
+        else:
+            await app_state.feishu.send_text(open_id, result.get("message", "请求已处理"))
+        REQUESTS.labels("message", result["type"]).inc()
+    except Exception:
+        logger.exception("failed to process Feishu message", extra={"open_id": open_id})
 
 
 @asynccontextmanager
@@ -126,7 +139,7 @@ async def metrics():
 
 
 @app.post("/webhooks/feishu/events")
-async def feishu_events(request: Request):
+async def feishu_events(request: Request, background_tasks: BackgroundTasks):
     payload = await request.json()
     _verify(payload)
     if payload.get("type") == "url_verification":
@@ -135,13 +148,7 @@ async def feishu_events(request: Request):
     if not message_event:
         return {"ok": True}
     open_id, text = message_event
-    profile = await request.app.state.feishu.get_user_profile(open_id)
-    result = await request.app.state.service.start(open_id, profile, text)
-    if card := result.get("card"):
-        await request.app.state.feishu.send_card(open_id, card)
-    else:
-        await request.app.state.feishu.send_text(open_id, result.get("message", "请求已处理"))
-    REQUESTS.labels("message", result["type"]).inc()
+    background_tasks.add_task(_process_feishu_message, request.app.state, open_id, text)
     return {"ok": True}
 
 
