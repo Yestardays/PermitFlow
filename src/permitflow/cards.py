@@ -92,4 +92,7 @@ def result_card(result: JiraResult) -> dict:
             f"Jira 暂时不可用，请打开[服务台]({result.fallback_url})并粘贴以下内容："
             f"\n```\n{result.fallback_text}\n```"
         )
-    return {"elements": [{"tag": "markdown", "content": content}]}
+    return {
+        "schema": "2.0",
+        "body": {"elements": [{"tag": "markdown", "content": content}]},
+    }

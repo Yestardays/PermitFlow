@@ -55,6 +55,13 @@ def _card_action(payload: dict) -> tuple[str | None, dict, dict]:
     return open_id, value, form_values
 
 
+def _card_callback_response(result: dict) -> dict:
+    response = {"toast": {"type": "success", "content": result.get("message", "已处理")}}
+    if card := result.get("card"):
+        response["card"] = {"type": "raw", "data": card}
+    return response
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -161,12 +168,7 @@ async def card_actions(request: Request):
     else:
         raise HTTPException(status_code=400, detail="unknown action")
     REQUESTS.labels("card_action", result["type"]).inc()
-    return JSONResponse(
-        {
-            "toast": {"type": "success", "content": result.get("message", "已处理")},
-            "card": result.get("card"),
-        }
-    )
+    return JSONResponse(_card_callback_response(result))
 
 
 @app.post("/webhooks/jira/status")

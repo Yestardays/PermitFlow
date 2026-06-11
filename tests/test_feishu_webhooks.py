@@ -1,4 +1,4 @@
-from permitflow.app import _card_action, _message_event
+from permitflow.app import _card_action, _card_callback_response, _message_event
 
 
 def test_v2_message_event_is_parsed():
@@ -53,3 +53,11 @@ def test_legacy_card_action_is_normalized():
     }
 
     assert _card_action(payload) == ("ou_old", {"action": "cancel"}, {})
+
+
+def test_v2_callback_wraps_raw_card_data():
+    card = {"schema": "2.0", "body": {"elements": []}}
+
+    response = _card_callback_response({"type": "submitted", "card": card})
+
+    assert response["card"] == {"type": "raw", "data": card}
