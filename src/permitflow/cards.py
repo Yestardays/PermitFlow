@@ -46,39 +46,46 @@ def confirmation_card(draft: ApplicationDraft) -> dict:
         }
     )
     return {
+        "schema": "2.0",
         "config": {"wide_screen_mode": True, "enable_forward": False},
         "header": {"title": {"tag": "plain_text", "content": "确认权限申请"}},
-        "elements": [
-            {
-                "tag": "markdown",
-                "content": f"**权限**：{draft.permission.name}\n**申请人**：{draft.applicant.name}",
-            },
-            {
-                "tag": "form",
-                "name": "application",
-                "elements": [
-                    *inputs,
-                    {
-                        "tag": "action",
-                        "actions": [
-                            {
-                                "tag": "button",
-                                "type": "primary",
-                                "text": {"tag": "plain_text", "content": "确认提交"},
-                                "name": "submit",
-                                "value": {"action": "confirm_submit"},
-                            },
-                            {
-                                "tag": "button",
-                                "text": {"tag": "plain_text", "content": "取消"},
-                                "name": "cancel",
-                                "value": {"action": "cancel"},
-                            },
-                        ],
-                    },
-                ],
-            },
-        ],
+        "body": {
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": (
+                        f"**权限**：{draft.permission.name}\n"
+                        f"**申请人**：{draft.applicant.name}"
+                    ),
+                },
+                {
+                    "tag": "form",
+                    "name": "application",
+                    "elements": [
+                        *inputs,
+                        {
+                            "tag": "action",
+                            "actions": [
+                                {
+                                    "tag": "button",
+                                    "type": "primary",
+                                    "text": {"tag": "plain_text", "content": "确认提交"},
+                                    "name": "submit",
+                                    "action_type": "form_submit",
+                                    "value": {"action": "confirm_submit"},
+                                },
+                                {
+                                    "tag": "button",
+                                    "text": {"tag": "plain_text", "content": "取消"},
+                                    "name": "cancel",
+                                    "value": {"action": "cancel"},
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ]
+        },
     }
 
 
